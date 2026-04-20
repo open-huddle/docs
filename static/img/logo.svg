@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-label="Open Huddle">
+  <defs>
+    <linearGradient id="oh-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <circle cx="20" cy="20" r="16" fill="url(#oh-g)"/>
+  <circle cx="20" cy="20" r="5.5" fill="#ffffff"/>
+  <circle cx="20" cy="20" r="11" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="1.4"/>
+</svg>

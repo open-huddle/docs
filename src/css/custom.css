@@ -1,0 +1,125 @@
+/**
+ * Open Huddle theme — enterprise, compliance-ready.
+ *
+ * Primary:   deep indigo  (#1e3a8a)
+ * Accent:    teal         (#0d9488)
+ * Neutrals:  slate-based gray ramp
+ * Type:      Inter for UI, JetBrains Mono for code
+ */
+
+:root {
+  --ifm-color-primary: #1e3a8a;
+  --ifm-color-primary-dark: #1b347c;
+  --ifm-color-primary-darker: #1a3175;
+  --ifm-color-primary-darkest: #152860;
+  --ifm-color-primary-light: #214098;
+  --ifm-color-primary-lighter: #22439f;
+  --ifm-color-primary-lightest: #274cb4;
+
+  --oh-accent: #0d9488;
+  --oh-accent-soft: #14b8a6;
+  --oh-surface: #ffffff;
+  --oh-surface-muted: #f8fafc;
+  --oh-border: #e2e8f0;
+  --oh-text-muted: #64748b;
+
+  --ifm-font-family-base: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ifm-font-family-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --ifm-heading-font-weight: 600;
+  --ifm-font-weight-semibold: 600;
+
+  --ifm-code-font-size: 92%;
+  --ifm-code-padding-vertical: 0.15rem;
+  --ifm-code-padding-horizontal: 0.35rem;
+  --docusaurus-highlighted-code-line-bg: rgba(30, 58, 138, 0.1);
+
+  --ifm-navbar-height: 64px;
+  --ifm-navbar-shadow: 0 1px 0 0 var(--oh-border);
+  --ifm-global-radius: 8px;
+  --ifm-button-border-radius: 6px;
+}
+
+[data-theme="dark"] {
+  --ifm-color-primary: #93c5fd;
+  --ifm-color-primary-dark: #7fb5fb;
+  --ifm-color-primary-darker: #75aefa;
+  --ifm-color-primary-darkest: #4e95f8;
+  --ifm-color-primary-light: #a7d5fd;
+  --ifm-color-primary-lighter: #b1dcfe;
+  --ifm-color-primary-lightest: #ceebfe;
+
+  --oh-accent: #2dd4bf;
+  --oh-accent-soft: #5eead4;
+  --oh-surface: #0f172a;
+  --oh-surface-muted: #111827;
+  --oh-border: #1f2937;
+  --oh-text-muted: #94a3b8;
+
+  --docusaurus-highlighted-code-line-bg: rgba(147, 197, 253, 0.18);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--oh-border);
+  box-shadow: none;
+  backdrop-filter: saturate(180%) blur(10px);
+  background: color-mix(in srgb, var(--ifm-background-color) 88%, transparent);
+}
+
+.navbar__logo img {
+  height: 28px;
+}
+
+.header-github-link::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  display: flex;
+  background-color: var(--ifm-navbar-link-color);
+  mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57v-2c-3.34.73-4.04-1.61-4.04-1.61-.54-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.3 3.5.99.1-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.96 0-1.32.47-2.4 1.24-3.24-.12-.3-.54-1.52.12-3.17 0 0 1.01-.33 3.3 1.23a11.45 11.45 0 0 1 6 0c2.29-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.87.12 3.17.77.84 1.24 1.92 1.24 3.24 0 4.63-2.82 5.65-5.5 5.95.43.37.82 1.1.82 2.23v3.3c0 .32.22.7.83.58A12 12 0 0 0 12 .3Z'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  transition: background-color 0.2s;
+}
+.header-github-link:hover::before {
+  background-color: var(--ifm-color-primary);
+}
+
+.card {
+  border: 1px solid var(--oh-border);
+  border-radius: var(--ifm-global-radius);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.card:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--ifm-color-primary) 30%, transparent);
+  transform: translateY(-1px);
+}
+
+div[class*="announcementBar"] {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--oh-border);
+}
+
+.menu__link {
+  font-weight: 400;
+}
+.menu__link--active {
+  font-weight: 600;
+}
+
+.markdown blockquote {
+  border-left: 3px solid var(--ifm-color-primary);
+  background: var(--oh-surface-muted);
+  padding: 0.75rem 1rem;
+  border-radius: 0 var(--ifm-global-radius) var(--ifm-global-radius) 0;
+  color: inherit;
+}
+
+.footer--dark {
+  --ifm-footer-background-color: #0b1220;
+  --ifm-footer-link-color: #cbd5e1;
+  --ifm-footer-title-color: #ffffff;
+}

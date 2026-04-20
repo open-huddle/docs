@@ -1,0 +1,8 @@
+open-huddle:
+  name: Open Huddle Team
+  title: Project maintainers
+  url: https://github.com/open-huddle
+  image_url: https://github.com/open-huddle.png
+  page: true
+  socials:
+    github: open-huddle

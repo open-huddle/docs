@@ -62,6 +62,7 @@ const sidebars: SidebarsConfig = {
         "adr/record-architecture-decisions",
         "adr/monorepo-layout",
         "adr/connect-rpc-over-plain-grpc",
+        "adr/versioned-migrations-ent-atlas",
       ],
     },
   ],

@@ -24,6 +24,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0001](/adr/record-architecture-decisions) | Record architecture decisions | Accepted |
 | [0002](/adr/monorepo-layout) | Monorepo layout | Accepted |
 | [0003](/adr/connect-rpc-over-plain-grpc) | Connect RPC over plain gRPC | Accepted |
+| [0004](/adr/versioned-migrations-ent-atlas) | Versioned migrations via Ent + Atlas | Accepted |
 
 ## Writing a new ADR
 

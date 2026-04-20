@@ -25,6 +25,10 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0002](/adr/monorepo-layout) | Monorepo layout | Accepted |
 | [0003](/adr/connect-rpc-over-plain-grpc) | Connect RPC over plain gRPC | Accepted |
 | [0004](/adr/versioned-migrations-ent-atlas) | Versioned migrations via Ent + Atlas | Accepted |
+| [0005](/adr/markdown-for-message-body) | Markdown for message body | Accepted |
+| [0006](/adr/connect-streaming-for-realtime) | Connect server-streaming for realtime | Accepted |
+| [0007](/adr/event-broker-from-day-one) | Event broker from day one | Accepted |
+| [0008](/adr/handler-level-authorization) | Handler-level authorization | Accepted |
 
 ## Writing a new ADR
 

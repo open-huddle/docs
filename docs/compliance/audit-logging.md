@@ -29,7 +29,7 @@ Two things follow from that shape:
 |---|---|
 | `id` | UUID, assigned by the consumer |
 | `created_at` | Timestamp when the audit row was written |
-| `outbox_event_id` | Unique reference to the originating outbox row (idempotency key) |
+| `outbox_event_id` | Unique reference to the originating outbox row (idempotency key). Nullable: transitions to NULL after the outbox GC worker deletes the source row. The denormalized fields below carry forward unchanged, so compliance queries do not rely on this pointer. See [ADR-0011](/adr/outbox-gc-and-audit-decoupling). |
 | `event_type` | Verb on the aggregate — e.g. `message.created` |
 | `actor_id` | Authenticated user's Open Huddle UUID (nullable — reserved for future system-originated events) |
 | `organization_id` | Tenant scope (nullable) |
@@ -47,7 +47,7 @@ The schema is append-only by convention — the audit consumer only writes, neve
 
 ### Retention and GC
 
-`audit_events` rows are never trimmed by the application. The outbox rows that feed them are also retained — an outbox GC worker is a [known follow-up](/adr/transactional-outbox-and-audit-consumer) but is not yet in place. For now, operators manage growth at the Postgres level.
+`audit_events` rows are never trimmed by the application — the project does not run a compliance-retention cron; operators own that policy. The **outbox** rows that feed audit, on the other hand, are trimmed by `outbox.GC` once they're fully processed and older than `outbox.retention` (default 24h). When the outbox row disappears, the audit row's `outbox_event_id` is `SET NULL` via the FK cascade; every other field on the audit row is preserved. See [ADR-0011](/adr/outbox-gc-and-audit-decoupling).
 
 ## Planned
 

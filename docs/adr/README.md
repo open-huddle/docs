@@ -31,6 +31,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0008](/adr/handler-level-authorization) | Handler-level authorization | Accepted |
 | [0009](/adr/transactional-outbox-and-audit-consumer) | Transactional outbox and decoupled audit consumer | Accepted |
 | [0010](/adr/search-service-and-indexer) | Search service and OpenSearch indexer | Accepted |
+| [0011](/adr/outbox-gc-and-audit-decoupling) | Outbox GC and audit/outbox FK decoupling | Accepted |
 
 ## Writing a new ADR
 

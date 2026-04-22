@@ -32,6 +32,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0009](/adr/transactional-outbox-and-audit-consumer) | Transactional outbox and decoupled audit consumer | Accepted |
 | [0010](/adr/search-service-and-indexer) | Search service and OpenSearch indexer | Accepted |
 | [0011](/adr/outbox-gc-and-audit-decoupling) | Outbox GC and audit/outbox FK decoupling | Accepted |
+| [0012](/adr/skip-locked-outbox-claim) | Multi-replica outbox claim via SELECT FOR UPDATE SKIP LOCKED | Accepted |
 
 ## Writing a new ADR
 

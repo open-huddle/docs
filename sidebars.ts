@@ -68,6 +68,7 @@ const sidebars: SidebarsConfig = {
         "adr/event-broker-from-day-one",
         "adr/handler-level-authorization",
         "adr/transactional-outbox-and-audit-consumer",
+        "adr/search-service-and-indexer",
       ],
     },
   ],

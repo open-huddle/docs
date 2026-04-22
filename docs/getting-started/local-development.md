@@ -40,7 +40,8 @@ This starts the supporting services via Docker Compose:
 | **PostgreSQL** | 5432 | Hosts both the `huddle` (API) and `keycloak` databases. |
 | **Valkey** | 6379 | In-memory cache and presence store (not yet wired into the API). |
 | **Keycloak** | 8180 (HTTP), 9000 (management) | Identity provider; realm `huddle` is auto-imported on first boot. |
-| **NATS** | 4222 (client), 8222 (monitoring) | JetStream-enabled event bus. Used today for realtime message fan-out; Phase 3 adds search, audit, and notification consumers. |
+| **NATS** | 4222 (client), 8222 (monitoring) | JetStream-enabled event bus. Used today for realtime message fan-out; notification consumer lands later in Phase 3. |
+| **OpenSearch** | 9200 (HTTP) | Full-text search backend. The API's `search.Indexer` writes message projections here and `SearchService.SearchMessages` reads them. Dev-mode runs single-node with the security plugin disabled (Helm re-enables it). |
 
 Stop them with `make dev-down`. Add `-v` (`docker compose -f deploy/compose/docker-compose.yml down -v`) to wipe data — needed when you change the realm import or the Postgres init scripts, since both run only on first-volume boot.
 
@@ -78,6 +79,7 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.ChannelService/{Create, List, Get}` | bearer | Channels (per-org slug-unique). |
 | `POST /huddle.v1.MessageService/{Send, List}` | bearer | Send a message; cursor-paginated history. |
 | `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. See [ADR-0006](/adr/connect-streaming-for-realtime). |
+| `POST /huddle.v1.SearchService/SearchMessages` | bearer | Full-text search over indexed messages. See [ADR-0010](/adr/search-service-and-indexer). |
 
 Verify the public surface:
 
@@ -91,14 +93,15 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 
 ## Background workers
 
-`apps/api` runs two in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
+`apps/api` runs three in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
 
 | Worker | What it does | Default cadence |
 |---|---|---|
 | `outbox.Publisher` | Drains `outbox_events` rows to NATS on the subject stored per row. | 1s poll, 100-row batch |
 | `audit.Consumer` | Mirrors un-audited `outbox_events` rows into `audit_events` (the compliance projection). Reads the table directly, not NATS, so broker outages cannot lose audit rows. | 2s poll, 200-row batch |
+| `search.Indexer` | Projects `message.created` outbox rows into OpenSearch at the `huddle-messages` alias. Stamps `indexed_at` on the outbox row so retries upsert cleanly. | 2s poll, 200-row batch |
 
-Both tables are created by `20260421220110_add_outbox_and_audit.sql`, which `make migrate-apply` picks up with the rest. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for why the outbox exists and how these workers divide responsibilities, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
+All three read the same `outbox_events` table but stamp independent columns (`published_at`, the `audit_events` sibling row, `indexed_at`). They land through two migrations: `20260421220110_add_outbox_and_audit.sql` and `20260422131158_add_outbox_indexed_at.sql`, both picked up by `make migrate-apply`. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for the outbox pattern, [ADR-0010](/adr/search-service-and-indexer) for the search indexer specifically, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
 
 ## Get a token from Keycloak
 
@@ -158,6 +161,26 @@ buf curl --schema proto --protocol connect --http2-prior-knowledge \
 Open this in one terminal, then run the `Send` curl above in another — the new message prints to the streaming terminal as soon as it lands. The stream starts at "now" (no replay); use `List` to backfill history on connect or reconnect.
 
 Realtime delivery is fan-out: every connected subscriber for a channel receives every message sent to that channel. Underneath, sends publish to NATS JetStream on `huddle.messages.created.<channel_id>` and ephemeral consumers feed the streaming RPC. See [ADR-0007](/adr/event-broker-from-day-one) for why we wired the broker from day one rather than an in-process shim.
+
+## Search messages
+
+Once you've sent a few messages, `SearchService.SearchMessages` can find them by content. Indexing is asynchronous — a just-sent message is typically findable 2–3 seconds later (the indexer's default poll cadence).
+
+```bash
+curl -sS -X POST http://localhost:8080/huddle.v1.SearchService/SearchMessages \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"organization_id\":\"$ORG\",\"query\":\"markdown\"}"
+```
+
+Hits come back with a `snippet` field that wraps matched tokens in `**bold**` — Markdown-friendly, so clients render hits with the same pipeline they render message bodies with. The response also carries a `next_cursor`; pass it back on the next call to page through results. The caller must be a member of `organization_id`; every query is filtered to that tenant server-side before it touches OpenSearch. See [ADR-0010](/adr/search-service-and-indexer) for the full design.
+
+Peek at the index directly if you want to confirm a message has landed:
+
+```bash
+curl -sS 'http://localhost:9200/huddle-messages/_search?pretty' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":{"match_all":{}},"_source":["id","body","created_at"]}'
+```
 
 ## Without a token
 

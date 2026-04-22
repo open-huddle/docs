@@ -30,22 +30,35 @@ The project is under active construction. The "Today" diagram below reflects wha
                   │      PostgreSQL        │
                   │ domain + outbox_events │
                   │      + audit_events    │
-                  └─┬──────────────────┬───┘
-         polls      │                  │     polls (un-audited outbox rows)
-   un-published ────┘                  └──── mirrors to audit_events
-                   │                           ▲
-                   ▼                           │
-         ┌──────────────────┐          ┌──────────────────┐
-         │ outbox.Publisher │          │  audit.Consumer  │
-         │   (in-process)   │          │   (in-process)   │
-         └────────┬─────────┘          └──────────────────┘
+                  └─┬──────────────┬───┬───┘
+      polls un-     │              │   │    polls un-audited rows
+      published ────┘              │   └──── mirrors to audit_events
+                   │    polls un-  │                ▲
+                   │    indexed    │                │
+                   │    rows ──────┘                │
+                   ▼                                │
+         ┌──────────────────┐   ┌──────────────────┐
+         │ outbox.Publisher │   │  audit.Consumer  │
+         │   (in-process)   │   │   (in-process)   │
+         └────────┬─────────┘   └──────────────────┘
                   │ publish
                   ▼
-         ┌──────────────────┐          ┌──────────────────┐
-         │  NATS JetStream  │◄─────────│ MessageService   │
-         │  (realtime bus)  │ ephemeral│    .Subscribe    │
-         └──────────────────┘ consumer │ (streaming RPC)  │
-                                       └──────────────────┘
+         ┌──────────────────┐   ┌──────────────────┐
+         │  NATS JetStream  │◄──│ MessageService   │
+         │  (realtime bus)  │   │    .Subscribe    │
+         └──────────────────┘   │ (streaming RPC)  │
+                                └──────────────────┘
+
+         ┌──────────────────┐     ┌──────────────────┐
+         │ search.Indexer   │────►│   OpenSearch     │
+         │   (in-process)   │     │ huddle-messages  │
+         └──────────────────┘     └─────────┬────────┘
+                                            │
+                                            ▼
+                                 ┌──────────────────┐
+                                 │  SearchService   │
+                                 │ .SearchMessages  │
+                                 └──────────────────┘
 ```
 
 Today's path, in order:
@@ -56,6 +69,7 @@ Today's path, in order:
 4. **Drain.** `outbox.Publisher` polls un-published outbox rows and publishes each to the NATS subject stored on the row (`huddle.messages.created.<channel_id>` for message sends). See [ADR-0007](/adr/event-broker-from-day-one) for the broker choice.
 5. **Fan out in real time.** Connected clients on `MessageService.Subscribe` receive events via ephemeral JetStream consumers. See [ADR-0006](/adr/connect-streaming-for-realtime).
 6. **Mirror to audit.** `audit.Consumer` polls outbox rows that have no sibling `AuditEvent` and writes an idempotent mirror to `audit_events`. Runs independently of NATS — a broker outage does not lose audit events.
+7. **Index for search.** `search.Indexer` polls outbox rows of type `message.created` that have no `indexed_at` stamp yet, decodes the protobuf payload, and upserts the projection into OpenSearch. `SearchService.SearchMessages` reads from the same cluster. See [ADR-0010](/adr/search-service-and-indexer).
 
 A few supporting pieces live in the stack but are not yet wired into the API: **Valkey** runs in `make dev-up` for future presence and rate-limiting use; **LiveKit** is slated for voice/video in a later phase.
 
@@ -95,8 +109,7 @@ The architecture commits to an event-sourced backbone with multiple consumers, e
 
 Compared to today:
 
-- **Debezium replaces the in-process publisher.** The CDC reader tails the Postgres WAL (including the `outbox_events` table) and publishes to NATS from its own process. The audit consumer moves off polling onto the broker. See ADR-0009's "Out of scope" for the migration path.
-- **OpenSearch indexer** subscribes to message events and maintains the full-text index that backs a future `SearchService`.
+- **Debezium replaces the in-process publisher.** The CDC reader tails the Postgres WAL (including the `outbox_events` table) and publishes to NATS from its own process. The audit and search consumers move off polling onto the broker. See ADR-0009's "Out of scope" for the migration path.
 - **Notifications consumer** subscribes to the events that should trigger user notifications (mentions, DMs) and routes them to an email abstraction.
 - **Service mesh** (Linkerd) handles east-west mTLS automatically. The API stops doing any service-to-service authentication in application code.
 

@@ -69,6 +69,7 @@ const sidebars: SidebarsConfig = {
         "adr/handler-level-authorization",
         "adr/transactional-outbox-and-audit-consumer",
         "adr/search-service-and-indexer",
+        "adr/outbox-gc-and-audit-decoupling",
       ],
     },
   ],

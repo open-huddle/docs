@@ -89,6 +89,17 @@ curl -X POST http://localhost:8080/huddle.v1.HealthService/Check \
 curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 otherwise
 ```
 
+## Background workers
+
+`apps/api` runs two in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
+
+| Worker | What it does | Default cadence |
+|---|---|---|
+| `outbox.Publisher` | Drains `outbox_events` rows to NATS on the subject stored per row. | 1s poll, 100-row batch |
+| `audit.Consumer` | Mirrors un-audited `outbox_events` rows into `audit_events` (the compliance projection). Reads the table directly, not NATS, so broker outages cannot lose audit rows. | 2s poll, 200-row batch |
+
+Both tables are created by `20260421220110_add_outbox_and_audit.sql`, which `make migrate-apply` picks up with the rest. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for why the outbox exists and how these workers divide responsibilities, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
+
 ## Get a token from Keycloak
 
 The dev realm seeds two users — **`alice` / `alice`** and **`bob` / `bob`** (both `…@example.com`) — and one client (`huddle-web`) with the password grant enabled for testing. Production deployments will not enable the password grant.

@@ -29,6 +29,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0006](/adr/connect-streaming-for-realtime) | Connect server-streaming for realtime | Accepted |
 | [0007](/adr/event-broker-from-day-one) | Event broker from day one | Accepted |
 | [0008](/adr/handler-level-authorization) | Handler-level authorization | Accepted |
+| [0009](/adr/transactional-outbox-and-audit-consumer) | Transactional outbox and decoupled audit consumer | Accepted |
 
 ## Writing a new ADR
 

@@ -70,6 +70,7 @@ const sidebars: SidebarsConfig = {
         "adr/transactional-outbox-and-audit-consumer",
         "adr/search-service-and-indexer",
         "adr/outbox-gc-and-audit-decoupling",
+        "adr/skip-locked-outbox-claim",
       ],
     },
   ],

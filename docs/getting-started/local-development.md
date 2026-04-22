@@ -97,9 +97,9 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 
 | Worker | What it does | Default cadence |
 |---|---|---|
-| `outbox.Publisher` | Drains `outbox_events` rows to NATS on the subject stored per row. | 1s poll, 100-row batch |
+| `outbox.Publisher` | Drains `outbox_events` rows to NATS on the subject stored per row. Poll query uses `FOR UPDATE SKIP LOCKED` on Postgres so multiple API replicas drain disjoint rows (see [ADR-0012](/adr/skip-locked-outbox-claim)). | 1s poll, 100-row batch |
 | `audit.Consumer` | Mirrors un-audited `outbox_events` rows into `audit_events` (the compliance projection). Reads the table directly, not NATS, so broker outages cannot lose audit rows. | 2s poll, 200-row batch |
-| `search.Indexer` | Projects `message.created` outbox rows into OpenSearch at the `huddle-messages` alias. Stamps `indexed_at` on the outbox row so retries upsert cleanly. | 2s poll, 200-row batch |
+| `search.Indexer` | Projects `message.created` outbox rows into OpenSearch at the `huddle-messages` alias. Stamps `indexed_at` on the outbox row so retries upsert cleanly. Same `FOR UPDATE SKIP LOCKED` claim as the publisher. | 2s poll, 200-row batch |
 | `outbox.GC` | Deletes outbox rows that are fully published, fully audited, fully indexed, AND older than `outbox.retention` (default 24h). The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL` — audit rows survive the delete with their denormalized fields intact. | 5m poll, 500-row batch |
 
 The first three workers read the same `outbox_events` table and stamp independent markers (`published_at`, the `audit_events` sibling row, `indexed_at`); the GC worker deletes rows where all three markers are set. Migrations that shape this: `20260421220110_add_outbox_and_audit.sql`, `20260422131158_add_outbox_indexed_at.sql`, and `20260422192521_decouple_audit_outbox_fk.sql`, all picked up by `make migrate-apply`. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for the outbox pattern, [ADR-0010](/adr/search-service-and-indexer) for the search indexer, [ADR-0011](/adr/outbox-gc-and-audit-decoupling) for the GC + FK decoupling, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.

@@ -20,7 +20,7 @@ description: How Open Huddle classifies, stores, and protects data.
 - **Postgres** holds structured data — users, channels, messages, memberships, audit metadata.
 - **SeaweedFS** holds unstructured data — attachments, call recordings, avatars.
 - **Valkey** holds ephemeral state — presence, rate-limit counters, session scratch space. Never PHI.
-- **OpenSearch** holds search-indexable projections. Sensitive fields are tokenized before indexing.
+- **OpenSearch** holds search-indexable projections. Today this is message bodies plus the `(id, channel_id, organization_id, author_id, created_at)` tuple used for tenant filtering and relevance sort. Every query is filtered by `organization_id` on the server side before it reaches the cluster — see [ADR-0010](/adr/search-service-and-indexer). Under a future MLS deployment, encrypted bodies are not indexed.
 
 ## What is never written anywhere
 

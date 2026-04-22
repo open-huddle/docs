@@ -224,7 +224,8 @@ Generated code under `gen/` is committed. Re-run tests and lints after regenerat
 | Target | What it does |
 |---|---|
 | `make lint` | Runs golangci-lint, ESLint, and `buf lint`. |
-| `make test` | Runs Go tests. |
+| `make test` | Runs Go unit tests (SQLite-backed, no Docker needed). |
+| `make test-integration` | Runs Postgres-backed integration tests behind `//go:build integration`. Requires Docker — spins up Postgres via testcontainers. |
 | `make fmt` | Formats Go and TypeScript sources. |
 | `make api-build` | Builds the Go API binary into `apps/api/bin/api`. |
 | `make web-build` | Production-builds the web app into `apps/web/dist`. |

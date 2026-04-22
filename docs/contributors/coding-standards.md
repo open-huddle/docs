@@ -12,7 +12,7 @@ description: What we expect from the code you contribute.
 - Linted with **golangci-lint** (config in [`.golangci.yml`](https://github.com/open-huddle/huddle/blob/main/.golangci.yml)).
 - Errors are wrapped with context (`fmt.Errorf("load config: %w", err)`).
 - Logs use structured `log/slog` and never contain PII / PHI (chat bodies, tokens).
-- Tests live alongside the code (`foo_test.go`). Integration tests may hit real databases behind the `integration` build tag.
+- Tests live alongside the code (`foo_test.go`). Postgres-specific behaviour (pgx error codes, `FOR UPDATE SKIP LOCKED`, FK cascades that differ from SQLite) goes in `*_integration_test.go` files behind `//go:build integration`; run them with `make test-integration` (Docker required — they spin up a shared Postgres container via `testcontainers-go`).
 
 ## TypeScript / React
 

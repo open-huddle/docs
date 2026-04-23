@@ -71,6 +71,7 @@ const sidebars: SidebarsConfig = {
         "adr/search-service-and-indexer",
         "adr/outbox-gc-and-audit-decoupling",
         "adr/skip-locked-outbox-claim",
+        "adr/email-invitations-and-email-abstraction",
       ],
     },
   ],

@@ -64,6 +64,12 @@ The project is under active construction. The "Today" diagram below reflects wha
          │    outbox.GC     │── deletes fully-stamped rows older
          │   (in-process)   │   than retention; audit siblings'
          └──────────────────┘   outbox_event_id → NULL via FK cascade
+
+         ┌──────────────────┐         ┌─────────────────────┐
+         │ invitations.     │────────►│   email.Sender      │
+         │   Mailer         │         │ (log / smtp driver) │
+         │ (in-process)     │         └─────────────────────┘
+         └──────────────────┘
 ```
 
 Today's path, in order:
@@ -76,6 +82,7 @@ Today's path, in order:
 6. **Mirror to audit.** `audit.Consumer` polls outbox rows that have no sibling `AuditEvent` and writes an idempotent mirror to `audit_events`. Runs independently of NATS — a broker outage does not lose audit events.
 7. **Index for search.** `search.Indexer` polls outbox rows of type `message.created` that have no `indexed_at` stamp yet, decodes the protobuf payload, and upserts the projection into OpenSearch. `SearchService.SearchMessages` reads from the same cluster. See [ADR-0010](/adr/search-service-and-indexer).
 8. **GC the outbox.** `outbox.GC` deletes fully-stamped outbox rows (published + indexed + audited) once they age past retention. The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL`, so audit rows survive the delete with their denormalized fields intact. See [ADR-0011](/adr/outbox-gc-and-audit-decoupling).
+9. **Send invitation emails.** `invitations.Mailer` polls the `invitations` table for pending rows, renders the email, hands it to `email.Sender` (log-driver in dev, smtp-driver in prod), records an `EmailDelivery` row, stamps `email_sent_at`, and clears the plaintext token. Separate from the outbox so the token never lands in `audit_events`. See [ADR-0013](/adr/email-invitations-and-email-abstraction).
 
 A few supporting pieces live in the stack but are not yet wired into the API: **Valkey** runs in `make dev-up` for future presence and rate-limiting use; **LiveKit** is slated for voice/video in a later phase.
 

@@ -76,6 +76,7 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.HealthService/Check` | none | Connect health RPC. |
 | `POST /huddle.v1.IdentityService/WhoAmI` | bearer | Returns the calling user; upserts the row on first call. |
 | `POST /huddle.v1.OrganizationService/{Create, List, AddMember}` | bearer | Tenant + membership management. |
+| `POST /huddle.v1.OrganizationService/{InviteMember, AcceptInvitation}` | bearer | Email-invite flow. See [ADR-0013](/adr/email-invitations-and-email-abstraction). |
 | `POST /huddle.v1.ChannelService/{Create, List, Get}` | bearer | Channels (per-org slug-unique). |
 | `POST /huddle.v1.MessageService/{Send, List}` | bearer | Send a message; cursor-paginated history. |
 | `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. See [ADR-0006](/adr/connect-streaming-for-realtime). |
@@ -101,6 +102,7 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 | `audit.Consumer` | Mirrors un-audited `outbox_events` rows into `audit_events` (the compliance projection). Reads the table directly, not NATS, so broker outages cannot lose audit rows. | 2s poll, 200-row batch |
 | `search.Indexer` | Projects `message.created` outbox rows into OpenSearch at the `huddle-messages` alias. Stamps `indexed_at` on the outbox row so retries upsert cleanly. Same `FOR UPDATE SKIP LOCKED` claim as the publisher. | 2s poll, 200-row batch |
 | `outbox.GC` | Deletes outbox rows that are fully published, fully audited, fully indexed, AND older than `outbox.retention` (default 24h). The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL` — audit rows survive the delete with their denormalized fields intact. | 5m poll, 500-row batch |
+| `invitations.Mailer` | Sends pending invitation emails. Polls `invitations` where `email_sent_at IS NULL AND expires_at > now() AND accepted_at IS NULL`, calls `email.Sender`, records an `EmailDelivery` row, stamps `email_sent_at` and clears the plaintext token. See [ADR-0013](/adr/email-invitations-and-email-abstraction). | 5s poll, 50-row batch |
 
 The first three workers read the same `outbox_events` table and stamp independent markers (`published_at`, the `audit_events` sibling row, `indexed_at`); the GC worker deletes rows where all three markers are set. Migrations that shape this: `20260421220110_add_outbox_and_audit.sql`, `20260422131158_add_outbox_indexed_at.sql`, and `20260422192521_decouple_audit_outbox_fk.sql`, all picked up by `make migrate-apply`. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for the outbox pattern, [ADR-0010](/adr/search-service-and-indexer) for the search indexer, [ADR-0011](/adr/outbox-gc-and-audit-decoupling) for the GC + FK decoupling, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
 
@@ -162,6 +164,40 @@ buf curl --schema proto --protocol connect --http2-prior-knowledge \
 Open this in one terminal, then run the `Send` curl above in another — the new message prints to the streaming terminal as soon as it lands. The stream starts at "now" (no replay); use `List` to backfill history on connect or reconnect.
 
 Realtime delivery is fan-out: every connected subscriber for a channel receives every message sent to that channel. Underneath, sends publish to NATS JetStream on `huddle.messages.created.<channel_id>` and ephemeral consumers feed the streaming RPC. See [ADR-0007](/adr/event-broker-from-day-one) for why we wired the broker from day one rather than an in-process shim.
+
+## Invite a member by email
+
+`InviteMember` mints a single-use token, persists its HMAC, and enqueues the email. The `invitations.Mailer` goroutine picks it up within ~5 seconds; in dev (`email.driver: log`, the default) the rendered body lands in the API log rather than reaching an SMTP relay.
+
+```bash
+# Alice invites bob@example.test as a member of her org.
+curl -sS -X POST http://localhost:8080/huddle.v1.OrganizationService/InviteMember \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"organization_id\":\"$ORG\",\"email\":\"bob@example.test\",\"role\":\"member\"}"
+```
+
+Within a few seconds, grep the API log for the rendered email and pull the token out of the accept URL:
+
+```bash
+# The LogSender prints a structured record at key `email.body` containing the URL.
+# Run `make api-run` in one terminal; the InviteMember call emits an `email.send`
+# line with the body embedded. Copy the token off `?token=<…>`.
+```
+
+```bash
+# Bob signs in via Keycloak, then accepts with the copied token.
+# His bearer token comes from a new `grant_type=password&username=bob&password=bob`
+# request against the same Keycloak realm; the seeded dev realm has Bob.
+BOB_TOKEN=...  # from Keycloak, matching bob@example.test
+
+curl -sS -X POST http://localhost:8080/huddle.v1.OrganizationService/AcceptInvitation \
+  -H "Authorization: Bearer $BOB_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"token\":\"<token-from-email>\"}"
+```
+
+Accept creates the Membership row and stamps the invitation terminal. The `Invitation.token_plaintext` column is cleared post-send (and again on accept as belt-and-braces); the hash lives on for as long as the invitation row does.
+
+To wire real SMTP (Mailpit, Mailhog, a production relay), set `email.driver: smtp` and fill in `email.smtp.host/port/username/password/start_tls`. See [ADR-0013](/adr/email-invitations-and-email-abstraction) for the rationale on HMAC, plaintext at rest, and why the mailer reads the Invitation table rather than the outbox payload.
 
 ## Search messages
 

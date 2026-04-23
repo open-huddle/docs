@@ -75,6 +75,7 @@ const sidebars: SidebarsConfig = {
         "adr/notifications-consumer-and-mentions",
         "adr/notification-email-delivery",
         "adr/message-edit-delete",
+        "adr/realtime-v2",
       ],
     },
   ],

@@ -79,7 +79,7 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.OrganizationService/{InviteMember, AcceptInvitation}` | bearer | Email-invite flow. See [ADR-0013](/adr/email-invitations-and-email-abstraction). |
 | `POST /huddle.v1.ChannelService/{Create, List, Get}` | bearer | Channels (per-org slug-unique). |
 | `POST /huddle.v1.MessageService/{Send, List, Edit, Delete}` | bearer | Send, list, edit, and soft-delete messages. Edit is author-only; Delete is author or admin/owner. See [ADR-0016](/adr/message-edit-delete). |
-| `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. Edits and deletes don't propagate through Subscribe yet; clients refetch via List. See [ADR-0006](/adr/connect-streaming-for-realtime) and [ADR-0016](/adr/message-edit-delete). |
+| `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes creates, edits, and deletes. Responses carry a `oneof event { created, edited, deleted }`; clients switch on variant. See [ADR-0006](/adr/connect-streaming-for-realtime) for the streaming choice and [ADR-0017](/adr/realtime-v2) for the envelope. |
 | `POST /huddle.v1.SearchService/SearchMessages` | bearer | Full-text search over indexed messages. See [ADR-0010](/adr/search-service-and-indexer). |
 | `POST /huddle.v1.NotificationService/{List, MarkRead, GetPreferences, SetPreference}` | bearer | In-app notifications inbox (@-mentions today) + per-kind email preferences (default opt-out; see [ADR-0015](/adr/notification-email-delivery)). |
 
@@ -208,9 +208,20 @@ buf curl --schema proto --protocol connect --http2-prior-knowledge \
   http://localhost:8080/huddle.v1.MessageService/Subscribe
 ```
 
-Open this in one terminal, then run the `Send` curl above in another — the new message prints to the streaming terminal as soon as it lands. The stream starts at "now" (no replay); use `List` to backfill history on connect or reconnect.
+Open this in one terminal, then run the `Send`, `Edit`, or `Delete` curls in another — each one prints a response with a different `event` variant populated:
 
-Realtime delivery is fan-out: every connected subscriber for a channel receives every message sent to that channel. Underneath, sends publish to NATS JetStream on `huddle.messages.created.<channel_id>` and ephemeral consumers feed the streaming RPC. See [ADR-0007](/adr/event-broker-from-day-one) for why we wired the broker from day one rather than an in-process shim.
+```json
+// A Send — the "created" variant:
+{"created":{"message":{"id":"...", "body":"hello", ...}}}
+// An Edit on that same message — the "edited" variant (same Message shape, with edited_at set):
+{"edited":{"message":{"id":"...", "body":"edited", "edited_at": "..."}}}
+// A Delete — the "deleted" variant (ids only; body was soft-deleted):
+{"deleted":{"message_id":"...", "channel_id":"..."}}
+```
+
+The stream starts at "now" (no replay); use `List` to backfill history on connect or reconnect.
+
+Realtime delivery is fan-out: every connected subscriber for a channel receives every mutation. Underneath, publishes go to NATS JetStream on `huddle.messages.{created,edited,deleted}.<channel_id>`; a single ephemeral consumer per stream filters on `huddle.messages.*.<channel_id>` and dispatches to the right oneof variant. See [ADR-0007](/adr/event-broker-from-day-one) for the broker choice and [ADR-0017](/adr/realtime-v2) for the envelope redesign.
 
 ## Invite a member by email
 

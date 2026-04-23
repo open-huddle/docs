@@ -37,6 +37,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0014](/adr/notifications-consumer-and-mentions) | Notifications consumer and the mention model | Accepted |
 | [0015](/adr/notification-email-delivery) | Notification email delivery and preferences | Accepted |
 | [0016](/adr/message-edit-delete) | Message edit/delete + search re-keying | Accepted |
+| [0017](/adr/realtime-v2) | Realtime v2: Subscribe event envelope | Accepted |
 
 ## Writing a new ADR
 

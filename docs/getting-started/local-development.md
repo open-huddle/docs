@@ -81,6 +81,7 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.MessageService/{Send, List}` | bearer | Send a message; cursor-paginated history. |
 | `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. See [ADR-0006](/adr/connect-streaming-for-realtime). |
 | `POST /huddle.v1.SearchService/SearchMessages` | bearer | Full-text search over indexed messages. See [ADR-0010](/adr/search-service-and-indexer). |
+| `POST /huddle.v1.NotificationService/{List, MarkRead}` | bearer | In-app notifications inbox (@-mentions today). See [ADR-0014](/adr/notifications-consumer-and-mentions). |
 
 Verify the public surface:
 
@@ -94,7 +95,7 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 
 ## Background workers
 
-`apps/api` runs four in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
+`apps/api` runs six in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
 
 | Worker | What it does | Default cadence |
 |---|---|---|
@@ -103,6 +104,7 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 | `search.Indexer` | Projects `message.created` outbox rows into OpenSearch at the `huddle-messages` alias. Stamps `indexed_at` on the outbox row so retries upsert cleanly. Same `FOR UPDATE SKIP LOCKED` claim as the publisher. | 2s poll, 200-row batch |
 | `outbox.GC` | Deletes outbox rows that are fully published, fully audited, fully indexed, AND older than `outbox.retention` (default 24h). The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL` — audit rows survive the delete with their denormalized fields intact. | 5m poll, 500-row batch |
 | `invitations.Mailer` | Sends pending invitation emails. Polls `invitations` where `email_sent_at IS NULL AND expires_at > now() AND accepted_at IS NULL`, calls `email.Sender`, records an `EmailDelivery` row, stamps `email_sent_at` and clears the plaintext token. See [ADR-0013](/adr/email-invitations-and-email-abstraction). | 5s poll, 50-row batch |
+| `notifications.Consumer` | Fans out `Notification` rows from `message.created` outbox events — one per `mention_user_id`. Stamps `notified_at` on every row it evaluates so `outbox.GC` can proceed. See [ADR-0014](/adr/notifications-consumer-and-mentions). | 2s poll, 200-row batch |
 
 The first three workers read the same `outbox_events` table and stamp independent markers (`published_at`, the `audit_events` sibling row, `indexed_at`); the GC worker deletes rows where all three markers are set. Migrations that shape this: `20260421220110_add_outbox_and_audit.sql`, `20260422131158_add_outbox_indexed_at.sql`, and `20260422192521_decouple_audit_outbox_fk.sql`, all picked up by `make migrate-apply`. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for the outbox pattern, [ADR-0010](/adr/search-service-and-indexer) for the search indexer, [ADR-0011](/adr/outbox-gc-and-audit-decoupling) for the GC + FK decoupling, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
 
@@ -139,16 +141,35 @@ CH=$(curl -sS -X POST http://localhost:8080/huddle.v1.ChannelService/Create \
   -d "{\"organization_id\":\"$ORG\",\"name\":\"General\",\"slug\":\"general\"}" \
   | jq -r .channel.id)
 
-# Send a Markdown message
+# Send a Markdown message (optionally @-mentioning org members via
+# mention_user_ids; ids must belong to the channel's organization).
 curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/Send \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"channel_id\":\"$CH\",\"body\":\"hello with **markdown**\"}"
 
-# List recent messages (newest first, cursor-paginated)
+# List recent messages (newest first, cursor-paginated; mention_user_ids
+# is hydrated from the message_mentions join table).
 curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/List \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"channel_id\":\"$CH\",\"limit\":50}"
 ```
+
+## Check your notifications
+
+Whenever a message lands with `mention_user_ids` including your user id, `notifications.Consumer` materializes a `Notification` row for you within ~2 seconds. The inbox is served by `NotificationService.List` (unread-only by default):
+
+```bash
+# Bob's side: list @-mentions he hasn't read yet.
+curl -sS -X POST http://localhost:8080/huddle.v1.NotificationService/List \
+  -H "Authorization: Bearer $BOB_TOKEN" -H "Content-Type: application/json" -d '{}'
+
+# Mark one read by id — idempotent.
+curl -sS -X POST http://localhost:8080/huddle.v1.NotificationService/MarkRead \
+  -H "Authorization: Bearer $BOB_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"id\":\"<notification-uuid>\"}"
+```
+
+See [ADR-0014](/adr/notifications-consumer-and-mentions) for the mention-model rationale and why the mailer-on-mention side ships as a separate PR on top of the `email.Sender` from [ADR-0013](/adr/email-invitations-and-email-abstraction).
 
 ## Subscribe to live messages
 

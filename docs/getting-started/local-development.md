@@ -78,8 +78,8 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.OrganizationService/{Create, List, AddMember}` | bearer | Tenant + membership management. |
 | `POST /huddle.v1.OrganizationService/{InviteMember, AcceptInvitation}` | bearer | Email-invite flow. See [ADR-0013](/adr/email-invitations-and-email-abstraction). |
 | `POST /huddle.v1.ChannelService/{Create, List, Get}` | bearer | Channels (per-org slug-unique). |
-| `POST /huddle.v1.MessageService/{Send, List}` | bearer | Send a message; cursor-paginated history. |
-| `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. See [ADR-0006](/adr/connect-streaming-for-realtime). |
+| `POST /huddle.v1.MessageService/{Send, List, Edit, Delete}` | bearer | Send, list, edit, and soft-delete messages. Edit is author-only; Delete is author or admin/owner. See [ADR-0016](/adr/message-edit-delete). |
+| `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. Edits and deletes don't propagate through Subscribe yet; clients refetch via List. See [ADR-0006](/adr/connect-streaming-for-realtime) and [ADR-0016](/adr/message-edit-delete). |
 | `POST /huddle.v1.SearchService/SearchMessages` | bearer | Full-text search over indexed messages. See [ADR-0010](/adr/search-service-and-indexer). |
 | `POST /huddle.v1.NotificationService/{List, MarkRead, GetPreferences, SetPreference}` | bearer | In-app notifications inbox (@-mentions today) + per-kind email preferences (default opt-out; see [ADR-0015](/adr/notification-email-delivery)). |
 
@@ -153,6 +153,18 @@ curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/Send \
 curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/List \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"channel_id\":\"$CH\",\"limit\":50}"
+
+# Edit the message (author-only) — note the id comes back as message.id
+# from the Send response. edited_at stamps each successful call.
+curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/Edit \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"id\":\"<message-id>\",\"body\":\"edited *markdown*\"}"
+
+# Soft-delete (author OR admin/owner). Subsequent List calls won't show
+# the row; the row stays in Postgres for audit.
+curl -sS -X POST http://localhost:8080/huddle.v1.MessageService/Delete \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"id\":\"<message-id>\"}"
 ```
 
 ## Check your notifications

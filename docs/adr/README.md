@@ -36,6 +36,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0013](/adr/email-invitations-and-email-abstraction) | Email invitations and the email abstraction | Accepted |
 | [0014](/adr/notifications-consumer-and-mentions) | Notifications consumer and the mention model | Accepted |
 | [0015](/adr/notification-email-delivery) | Notification email delivery and preferences | Accepted |
+| [0016](/adr/message-edit-delete) | Message edit/delete + search re-keying | Accepted |
 
 ## Writing a new ADR
 

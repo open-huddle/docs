@@ -74,6 +74,7 @@ const sidebars: SidebarsConfig = {
         "adr/email-invitations-and-email-abstraction",
         "adr/notifications-consumer-and-mentions",
         "adr/notification-email-delivery",
+        "adr/message-edit-delete",
       ],
     },
   ],

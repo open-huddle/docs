@@ -70,6 +70,12 @@ The project is under active construction. The "Today" diagram below reflects wha
          │   Mailer         │         │ (log / smtp driver) │
          │ (in-process)     │         └─────────────────────┘
          └──────────────────┘
+
+         ┌──────────────────┐         ┌─────────────────────┐
+         │ notifications.   │────────►│   notifications     │── in-app inbox
+         │    Consumer      │         │     (Postgres)      │   via NotificationService
+         │  (in-process)    │         └─────────────────────┘
+         └──────────────────┘
 ```
 
 Today's path, in order:
@@ -83,6 +89,7 @@ Today's path, in order:
 7. **Index for search.** `search.Indexer` polls outbox rows of type `message.created` that have no `indexed_at` stamp yet, decodes the protobuf payload, and upserts the projection into OpenSearch. `SearchService.SearchMessages` reads from the same cluster. See [ADR-0010](/adr/search-service-and-indexer).
 8. **GC the outbox.** `outbox.GC` deletes fully-stamped outbox rows (published + indexed + audited) once they age past retention. The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL`, so audit rows survive the delete with their denormalized fields intact. See [ADR-0011](/adr/outbox-gc-and-audit-decoupling).
 9. **Send invitation emails.** `invitations.Mailer` polls the `invitations` table for pending rows, renders the email, hands it to `email.Sender` (log-driver in dev, smtp-driver in prod), records an `EmailDelivery` row, stamps `email_sent_at`, and clears the plaintext token. Separate from the outbox so the token never lands in `audit_events`. See [ADR-0013](/adr/email-invitations-and-email-abstraction).
+10. **Fan out notifications.** `notifications.Consumer` polls outbox rows with `notified_at IS NULL`. For `message.created` events it decodes the payload, reads the `mention_user_ids`, and writes one `Notification` per mentioned user (UNIQUE on `(recipient, message, kind)` keeps retries idempotent). Non-message event types get their `notified_at` stamped without further work so `outbox.GC` can proceed. `NotificationService.{List, MarkRead}` serves the resulting inbox. See [ADR-0014](/adr/notifications-consumer-and-mentions).
 
 A few supporting pieces live in the stack but are not yet wired into the API: **Valkey** runs in `make dev-up` for future presence and rate-limiting use; **LiveKit** is slated for voice/video in a later phase.
 
@@ -123,7 +130,7 @@ The architecture commits to an event-sourced backbone with multiple consumers, e
 Compared to today:
 
 - **Debezium replaces the in-process publisher.** The CDC reader tails the Postgres WAL (including the `outbox_events` table) and publishes to NATS from its own process. The audit and search consumers move off polling onto the broker. See ADR-0009's "Out of scope" for the migration path.
-- **Notifications consumer** subscribes to the events that should trigger user notifications (mentions, DMs) and routes them to an email abstraction.
+- **Notifications consumer** in-app side shipped with [ADR-0014](/adr/notifications-consumer-and-mentions); the **email-on-mention** side is the next increment — a small follow-up PR on top of the `email.Sender` abstraction from [ADR-0013](/adr/email-invitations-and-email-abstraction).
 - **Service mesh** (Linkerd) handles east-west mTLS automatically. The API stops doing any service-to-service authentication in application code.
 
 ## Why this shape

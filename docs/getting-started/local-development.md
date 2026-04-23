@@ -81,7 +81,7 @@ The API listens on `:8080` by default and exposes:
 | `POST /huddle.v1.MessageService/{Send, List}` | bearer | Send a message; cursor-paginated history. |
 | `POST /huddle.v1.MessageService/Subscribe` | bearer | **Server-streaming** — pushes new messages to subscribers via Connect. See [ADR-0006](/adr/connect-streaming-for-realtime). |
 | `POST /huddle.v1.SearchService/SearchMessages` | bearer | Full-text search over indexed messages. See [ADR-0010](/adr/search-service-and-indexer). |
-| `POST /huddle.v1.NotificationService/{List, MarkRead}` | bearer | In-app notifications inbox (@-mentions today). See [ADR-0014](/adr/notifications-consumer-and-mentions). |
+| `POST /huddle.v1.NotificationService/{List, MarkRead, GetPreferences, SetPreference}` | bearer | In-app notifications inbox (@-mentions today) + per-kind email preferences (default opt-out; see [ADR-0015](/adr/notification-email-delivery)). |
 
 Verify the public surface:
 
@@ -95,7 +95,7 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 
 ## Background workers
 
-`apps/api` runs six in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
+`apps/api` runs seven in-process goroutines alongside the HTTP server. They start with the process and exit on shutdown; there is nothing extra to launch.
 
 | Worker | What it does | Default cadence |
 |---|---|---|
@@ -105,6 +105,7 @@ curl -i http://localhost:8080/readyz   # 200 if PostgreSQL is reachable, 503 oth
 | `outbox.GC` | Deletes outbox rows that are fully published, fully audited, fully indexed, AND older than `outbox.retention` (default 24h). The FK on `audit_events.outbox_event_id` is `ON DELETE SET NULL` — audit rows survive the delete with their denormalized fields intact. | 5m poll, 500-row batch |
 | `invitations.Mailer` | Sends pending invitation emails. Polls `invitations` where `email_sent_at IS NULL AND expires_at > now() AND accepted_at IS NULL`, calls `email.Sender`, records an `EmailDelivery` row, stamps `email_sent_at` and clears the plaintext token. See [ADR-0013](/adr/email-invitations-and-email-abstraction). | 5s poll, 50-row batch |
 | `notifications.Consumer` | Fans out `Notification` rows from `message.created` outbox events — one per `mention_user_id`. Stamps `notified_at` on every row it evaluates so `outbox.GC` can proceed. See [ADR-0014](/adr/notifications-consumer-and-mentions). | 2s poll, 200-row batch |
+| `notifications.Mailer` | Sends notification emails for `Notification` rows where `emailed_at IS NULL` and the recipient hasn't opted out (default is opt-out / industry norm). Joins `Channel` + `User` + `Message` for the body; calls `email.Sender`; stamps `emailed_at`. See [ADR-0015](/adr/notification-email-delivery). | 5s poll, 50-row batch |
 
 The first three workers read the same `outbox_events` table and stamp independent markers (`published_at`, the `audit_events` sibling row, `indexed_at`); the GC worker deletes rows where all three markers are set. Migrations that shape this: `20260421220110_add_outbox_and_audit.sql`, `20260422131158_add_outbox_indexed_at.sql`, and `20260422192521_decouple_audit_outbox_fk.sql`, all picked up by `make migrate-apply`. See [ADR-0009](/adr/transactional-outbox-and-audit-consumer) for the outbox pattern, [ADR-0010](/adr/search-service-and-indexer) for the search indexer, [ADR-0011](/adr/outbox-gc-and-audit-decoupling) for the GC + FK decoupling, and [Audit logging](/compliance/audit-logging) for what ends up in `audit_events`.
 
@@ -169,7 +170,20 @@ curl -sS -X POST http://localhost:8080/huddle.v1.NotificationService/MarkRead \
   -d "{\"id\":\"<notification-uuid>\"}"
 ```
 
-See [ADR-0014](/adr/notifications-consumer-and-mentions) for the mention-model rationale and why the mailer-on-mention side ships as a separate PR on top of the `email.Sender` from [ADR-0013](/adr/email-invitations-and-email-abstraction).
+Within ~5s of the Notification landing, `notifications.Mailer` emails Bob (log-driver in dev — the full email lands in the API log). Bob can opt out per-kind:
+
+```bash
+# Get current preferences — defaults to email_enabled=true for every known kind.
+curl -sS -X POST http://localhost:8080/huddle.v1.NotificationService/GetPreferences \
+  -H "Authorization: Bearer $BOB_TOKEN" -H "Content-Type: application/json" -d '{}'
+
+# Opt out of mention emails (he'll still see them in the in-app inbox).
+curl -sS -X POST http://localhost:8080/huddle.v1.NotificationService/SetPreference \
+  -H "Authorization: Bearer $BOB_TOKEN" -H "Content-Type: application/json" \
+  -d '{"kind":"mention","email_enabled":false}'
+```
+
+See [ADR-0014](/adr/notifications-consumer-and-mentions) for the mention-model rationale and [ADR-0015](/adr/notification-email-delivery) for the email-delivery + preferences shape.
 
 ## Subscribe to live messages
 

@@ -35,6 +35,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0012](/adr/skip-locked-outbox-claim) | Multi-replica outbox claim via SELECT FOR UPDATE SKIP LOCKED | Accepted |
 | [0013](/adr/email-invitations-and-email-abstraction) | Email invitations and the email abstraction | Accepted |
 | [0014](/adr/notifications-consumer-and-mentions) | Notifications consumer and the mention model | Accepted |
+| [0015](/adr/notification-email-delivery) | Notification email delivery and preferences | Accepted |
 
 ## Writing a new ADR
 

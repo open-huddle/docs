@@ -73,6 +73,7 @@ const sidebars: SidebarsConfig = {
         "adr/skip-locked-outbox-claim",
         "adr/email-invitations-and-email-abstraction",
         "adr/notifications-consumer-and-mentions",
+        "adr/notification-email-delivery",
       ],
     },
   ],

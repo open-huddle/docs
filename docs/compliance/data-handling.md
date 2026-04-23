@@ -12,7 +12,7 @@ description: How Open Huddle classifies, stores, and protects data.
 |---|---|---|
 | **Public** | Feature documentation, system announcements | Documentation, blog |
 | **Internal** | Audit metadata, request IDs, structural data | Audit log, observability stack |
-| **Confidential** | Message bodies, attachment contents, call recordings | Postgres (encrypted), object store (encrypted), never logs |
+| **Confidential** | Message bodies, attachment contents, call recordings, invite tokens (plaintext, seconds-at-rest) | Postgres (encrypted), object store (encrypted), never logs |
 | **Restricted (PHI)** | Any of the above under a HIPAA deployment | Same as Confidential; additional retention and BAA requirements |
 
 ## Storage boundaries
@@ -27,6 +27,7 @@ description: How Open Huddle classifies, stores, and protects data.
 - Plaintext passwords. Keycloak owns credentials; the API never handles them.
 - API tokens, OIDC refresh tokens, or any bearer material — even in debug logs.
 - Full message bodies in application logs — even at trace level.
+- Invitation tokens in long-retention artifacts: `audit_events` rows for `invitation.created` carry only the invitation's identity + metadata, never the plaintext or its HMAC hash. The plaintext lives on the `Invitation` row for seconds at most (until the mailer sends) and is cleared thereafter. See [ADR-0013](/adr/email-invitations-and-email-abstraction).
 
 ## Encryption
 

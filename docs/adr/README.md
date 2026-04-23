@@ -33,6 +33,7 @@ The format is deliberately simple (see [ADR-0001](/adr/record-architecture-decis
 | [0010](/adr/search-service-and-indexer) | Search service and OpenSearch indexer | Accepted |
 | [0011](/adr/outbox-gc-and-audit-decoupling) | Outbox GC and audit/outbox FK decoupling | Accepted |
 | [0012](/adr/skip-locked-outbox-claim) | Multi-replica outbox claim via SELECT FOR UPDATE SKIP LOCKED | Accepted |
+| [0013](/adr/email-invitations-and-email-abstraction) | Email invitations and the email abstraction | Accepted |
 
 ## Writing a new ADR
 

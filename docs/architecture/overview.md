@@ -105,6 +105,8 @@ Today's path, in order:
 10. **Fan out notifications.** `notifications.Consumer` polls outbox rows with `notified_at IS NULL`. For `message.created` events it decodes the payload, reads the `mention_user_ids`, and writes one `Notification` per mentioned user (UNIQUE on `(recipient, message, kind)` keeps retries idempotent). Non-message event types get their `notified_at` stamped without further work so `outbox.GC` can proceed. `NotificationService.{List, MarkRead}` serves the resulting inbox. See [ADR-0014](/adr/notifications-consumer-and-mentions).
 11. **Email pending notifications.** `notifications.Mailer` polls `Notification` rows where `emailed_at IS NULL` and the recipient hasn't opted out (no matching `NotificationPreference` row OR one with `email_enabled = true`). Joins `Channel` + `User` + `Message` for the body, sends via `email.Sender`, stamps `emailed_at`. Same opt-out-by-default shape as Slack / GitHub. Preferences live at `NotificationService.{GetPreferences, SetPreference}`. See [ADR-0015](/adr/notification-email-delivery).
 
+`MessageService.Edit` and `Delete` also feed the outbox — `message.edited` emits `message_edited`-sourced notifications (in-app only, not emailed) and re-indexes the search doc by message id; `message.deleted` soft-deletes the row and removes the search doc. See [ADR-0016](/adr/message-edit-delete).
+
 A few supporting pieces live in the stack but are not yet wired into the API: **Valkey** runs in `make dev-up` for future presence and rate-limiting use; **LiveKit** is slated for voice/video in a later phase.
 
 ## Service map — target

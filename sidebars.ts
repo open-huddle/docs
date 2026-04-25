@@ -76,6 +76,7 @@ const sidebars: SidebarsConfig = {
         "adr/notification-email-delivery",
         "adr/message-edit-delete",
         "adr/realtime-v2",
+        "adr/debezium-cdc-foundations",
       ],
     },
   ],

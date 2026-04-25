@@ -53,7 +53,15 @@ Postgres in `dev-up` boots with `wal_level=logical` so the future Debezium-drive
 make dev-up-debezium
 ```
 
-This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column. While the profile is active alongside the in-process `outbox.Publisher`, every row is published to NATS twice — once by each path. Subscribers dedupe on message UUID so the realtime UI is fine, but the profile is a validation tool, not a steady-state configuration. The app-side toggle that turns the in-process publisher off (Slice B in ADR-0018) is a separate follow-up.
+This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column.
+
+By default the in-process `outbox.Publisher` is **also** running, so every row is published to NATS twice (once by each path). Subscribers dedupe on message UUID so the realtime UI is fine, but it's wasteful. To make Debezium the sole publisher, set the driver toggle when starting the API:
+
+```bash
+HUDDLE_OUTBOX_PUBLISHER_DRIVER=none make api-run
+```
+
+The API logs a `Warn` at startup confirming the in-process publisher is disabled and noting that an out-of-band CDC bridge MUST be running — if you forget to bring up the Debezium profile, realtime Subscribe will see no events. A typo in the driver value (`in-process` instead of `in_process`, for example) fails startup with an error naming the offending config key, so a misconfiguration cannot silently disable fan-out.
 
 ## Apply database migrations
 

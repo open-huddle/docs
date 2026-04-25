@@ -5,8 +5,8 @@ sidebar_label: "0018 · Debezium CDC foundations"
 
 # ADR 0018 — Debezium CDC for outbox publish (foundations)
 
-**Status:** Accepted (Slice A — foundations only)
-**Date:** 2026-04-25
+**Status:** Accepted (Slices A + B). Slice C still pending.
+**Date:** 2026-04-25 (Slice A); 2026-04-26 (Slice B status update)
 
 **Refines:** [ADR-0009](./transactional-outbox-and-audit-consumer) — replaces the in-process `outbox.Publisher` with WAL-driven CDC. Refines [ADR-0012](./skip-locked-outbox-claim) — SKIP LOCKED stops being load-bearing once Debezium is the sole publisher (one bridge process, one publish per row). Builds on [ADR-0007](./event-broker-from-day-one)'s NATS JetStream backbone.
 
@@ -35,9 +35,11 @@ Land the change in three slices, each independently shippable:
 - Debezium Server runs as a `profiles: [debezium]` service. `make dev-up` does **not** start it; `make dev-up-debezium` does. Its config maps the `outbox_events` schema to the SMT's expected fields, uses `route.by.field=subject` so the row's stored NATS subject becomes the destination topic, and emits `format.value=binary` so the message body on NATS is the raw protobuf bytes — byte-for-byte identical to what the in-process publisher writes today, so subscribers' `proto.Unmarshal` path doesn't change.
 - The in-process `outbox.Publisher` continues to run unchanged. While the `debezium` profile is active alongside it, every outbox row is published to NATS twice — once by each path. Subscribers key on message UUID and are robust to dupes, but this is **not** the production end-state. The duplicate window exists only when both publishers are deliberately running in the same environment, and it closes in Slice B.
 
-### Slice B — app-side cutover toggle (separate PR)
+### Slice B — app-side cutover toggle (accepted 2026-04-26)
 
-A new `outbox.publisher.driver` config (`in_process` | `none`, default `in_process`). When `none`, `cmd/api/main.go` skips starting the in-process publisher goroutine. The operator runbook for "switch to Debezium" becomes: bring up the Debezium profile **and** flip the driver to `none`. Until both happen, Debezium coexists with the in-process publisher and the duplicate-publish window applies.
+Shipped. `outbox.publisher.driver` config (`in_process` | `none`, default `in_process`). When `none`, `cmd/api/main.go` skips starting the in-process publisher goroutine and logs a `Warn` stating that an out-of-band CDC bridge MUST be publishing, or realtime Subscribe sees no events. `config.Load` validates the value strictly — a typo'd driver fails startup with an error naming the offending key, so a misconfiguration cannot silently disable fan-out.
+
+The operator runbook for "switch to Debezium" is now: bring up the Debezium profile (`make dev-up-debezium`) **and** set `HUDDLE_OUTBOX_PUBLISHER_DRIVER=none`. Until both happen, Debezium coexists with the in-process publisher and the duplicate-publish window applies; with both in place, Debezium is the sole publisher and there are no duplicates.
 
 ### Slice C — flip the default and remove the in-process worker (later)
 

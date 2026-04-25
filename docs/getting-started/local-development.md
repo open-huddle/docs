@@ -45,6 +45,16 @@ This starts the supporting services via Docker Compose:
 
 Stop them with `make dev-down`. Add `-v` (`docker compose -f deploy/compose/docker-compose.yml down -v`) to wipe data — needed when you change the realm import or the Postgres init scripts, since both run only on first-volume boot.
 
+### Optional: Debezium CDC bridge
+
+Postgres in `dev-up` boots with `wal_level=logical` so the future Debezium-driven publisher (see [ADR-0018](/adr/debezium-cdc-foundations)) can attach a replication slot. The Debezium Server container itself is **profile-gated** — `make dev-up` does not start it. To run the full CDC stack:
+
+```bash
+make dev-up-debezium
+```
+
+This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column. While the profile is active alongside the in-process `outbox.Publisher`, every row is published to NATS twice — once by each path. Subscribers dedupe on message UUID so the realtime UI is fine, but the profile is a validation tool, not a steady-state configuration. The app-side toggle that turns the in-process publisher off (Slice B in ADR-0018) is a separate follow-up.
+
 ## Apply database migrations
 
 ```bash

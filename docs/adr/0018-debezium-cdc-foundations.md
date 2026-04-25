@@ -5,8 +5,8 @@ sidebar_label: "0018 · Debezium CDC foundations"
 
 # ADR 0018 — Debezium CDC for outbox publish (foundations)
 
-**Status:** Accepted (Slices A + B). Slice C still pending.
-**Date:** 2026-04-25 (Slice A); 2026-04-26 (Slice B status update)
+**Status:** Accepted (all three slices).
+**Date:** 2026-04-25 (Slice A); 2026-04-26 (Slices B and C)
 
 **Refines:** [ADR-0009](./transactional-outbox-and-audit-consumer) — replaces the in-process `outbox.Publisher` with WAL-driven CDC. Refines [ADR-0012](./skip-locked-outbox-claim) — SKIP LOCKED stops being load-bearing once Debezium is the sole publisher (one bridge process, one publish per row). Builds on [ADR-0007](./event-broker-from-day-one)'s NATS JetStream backbone.
 
@@ -41,9 +41,11 @@ Shipped. `outbox.publisher.driver` config (`in_process` | `none`, default `in_pr
 
 The operator runbook for "switch to Debezium" is now: bring up the Debezium profile (`make dev-up-debezium`) **and** set `HUDDLE_OUTBOX_PUBLISHER_DRIVER=none`. Until both happen, Debezium coexists with the in-process publisher and the duplicate-publish window applies; with both in place, Debezium is the sole publisher and there are no duplicates.
 
-### Slice C — flip the default and remove the in-process worker (later)
+### Slice C — flip the default and remove the in-process worker (accepted 2026-04-26)
 
-Once Debezium has soaked in at least one production-shaped deployment, change the default driver to `none` and delete the in-process publisher code. The `outbox.GC` worker stays — it deletes rows once all consumer markers are set, which is unrelated to who published.
+Shipped. The in-process `outbox.Publisher` is deleted along with the `outbox.publisher.driver` config field, the two driver constants, and the validation block in `config.Load`. The `outbox.GC` worker stays — it deletes rows once all consumer markers are set, which is unrelated to who published. The publisher half of [ADR-0012](./skip-locked-outbox-claim) is moot in this configuration; its indexer half stands because `search.Indexer` is still an in-process worker.
+
+Soak time was deliberately compressed — Slice B was on `main` only briefly before Slice C landed. The trade-off was accepted because the rollback for Slice C is a clean revert (Slice A's compose profile and Slice B's toggle are independent and not affected) and the project is pre-alpha, not a production deployment with users.
 
 ## Alternatives considered
 

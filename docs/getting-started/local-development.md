@@ -45,23 +45,15 @@ This starts the supporting services via Docker Compose:
 
 Stop them with `make dev-down`. Add `-v` (`docker compose -f deploy/compose/docker-compose.yml down -v`) to wipe data — needed when you change the realm import or the Postgres init scripts, since both run only on first-volume boot.
 
-### Optional: Debezium CDC bridge
+### Debezium CDC bridge
 
-Postgres in `dev-up` boots with `wal_level=logical` so the future Debezium-driven publisher (see [ADR-0018](/adr/debezium-cdc-foundations)) can attach a replication slot. The Debezium Server container itself is **profile-gated** — `make dev-up` does not start it. To run the full CDC stack:
+Postgres in `dev-up` boots with `wal_level=logical` so the Debezium-driven publisher (see [ADR-0018](/adr/debezium-cdc-foundations)) can attach a replication slot. The Debezium Server container itself is **profile-gated** — `make dev-up` does not start it. To run with CDC publish wired up:
 
 ```bash
 make dev-up-debezium
 ```
 
-This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column.
-
-By default the in-process `outbox.Publisher` is **also** running, so every row is published to NATS twice (once by each path). Subscribers dedupe on message UUID so the realtime UI is fine, but it's wasteful. To make Debezium the sole publisher, set the driver toggle when starting the API:
-
-```bash
-HUDDLE_OUTBOX_PUBLISHER_DRIVER=none make api-run
-```
-
-The API logs a `Warn` at startup confirming the in-process publisher is disabled and noting that an out-of-band CDC bridge MUST be running — if you forget to bring up the Debezium profile, realtime Subscribe will see no events. A typo in the driver value (`in-process` instead of `in_process`, for example) fails startup with an error naming the offending config key, so a misconfiguration cannot silently disable fan-out.
+This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column. The API has no in-process publisher — Debezium is the only thing writing to NATS. If you skip `dev-up-debezium` (i.e. plain `make dev-up`), `MessageService.Send` still works and audit/search/notifications still process events from the table, but realtime `Subscribe` will see nothing because no one is publishing to the bus.
 
 ## Apply database migrations
 

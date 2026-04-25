@@ -5,10 +5,10 @@ sidebar_label: "0012 · SKIP LOCKED claim"
 
 # ADR 0012 — Multi-replica outbox claim via SELECT FOR UPDATE SKIP LOCKED
 
-**Status:** Accepted
+**Status:** Partially superseded by [ADR-0018](./debezium-cdc-foundations) — the publisher half of this ADR no longer applies once the in-process `outbox.Publisher` is removed (ADR-0018 Slice C, 2026-04-26); Debezium reading the WAL is now the single publisher per cluster, so SKIP LOCKED on the publisher is moot. The **search indexer half stands** — `search.Indexer` is still an in-process worker and still uses SKIP LOCKED so concurrent API replicas claim disjoint batches.
 **Date:** 2026-04-22
 
-**Refines:** [ADR-0009](./transactional-outbox-and-audit-consumer) — specifically its "Multi-replica publisher dedup" out-of-scope bullet and the single-replica dedup assumption in `internal/outbox.Publisher`'s package doc.
+**Refines:** [ADR-0009](./transactional-outbox-and-audit-consumer) — specifically its "Multi-replica publisher dedup" out-of-scope bullet and the single-replica dedup assumption in the original `internal/outbox.Publisher`'s package doc.
 
 ## Context
 

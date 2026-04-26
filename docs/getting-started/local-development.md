@@ -55,6 +55,30 @@ make dev-up-debezium
 
 This brings up the same five services plus a `debezium` container that tails `outbox_events` and publishes each new row to NATS, with the topic taken from the row's stored `subject` column. The API has no in-process publisher — Debezium is the only thing writing to NATS. If you skip `dev-up-debezium` (i.e. plain `make dev-up`), `MessageService.Send` still works and audit/search/notifications still process events from the table, but realtime `Subscribe` will see nothing because no one is publishing to the bus.
 
+### Observability stack
+
+Trace, metric, and log instrumentation is wired into the API behind a config flag (see [ADR-0019](/adr/observability-foundations)). The collector + backends + Grafana ship as a single `grafana/otel-lgtm` image, profile-gated:
+
+```bash
+make dev-up-observability
+```
+
+This brings up the same services plus an `otel-lgtm` container exposing:
+
+| Port | Surface |
+|---|---|
+| **3000** | Grafana UI (anonymous access, no login in dev) |
+| **4317** | OTLP/gRPC collector — what the API exports to |
+| **4318** | OTLP/HTTP collector — alternative for clients that can't speak gRPC |
+
+To turn on instrumentation in the API itself, set the env var when running it:
+
+```bash
+HUDDLE_OBSERVABILITY_ENABLED=true make api-run
+```
+
+You'll see HTTP requests, Connect RPCs, and SQL queries appear as spans in Grafana → Explore → Tempo, plus connection-pool metrics in Grafana → Explore → Prometheus. The default is **disabled** so a fresh `make api-run` doesn't try to dial a collector that isn't there. Slice A of ADR-0019 covers the framework instrumentation; per-worker spans + canned dashboards land in later slices.
+
 ## Apply database migrations
 
 ```bash

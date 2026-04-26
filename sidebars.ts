@@ -77,6 +77,7 @@ const sidebars: SidebarsConfig = {
         "adr/message-edit-delete",
         "adr/realtime-v2",
         "adr/debezium-cdc-foundations",
+        "adr/observability-foundations",
       ],
     },
   ],

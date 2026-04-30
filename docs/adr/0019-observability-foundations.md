@@ -5,8 +5,8 @@ sidebar_label: "0019 · Observability foundations"
 
 # ADR 0019 — Observability foundations: OpenTelemetry SDK and the Grafana LGTM stack
 
-**Status:** Accepted (Slice A — foundations only)
-**Date:** 2026-04-26
+**Status:** Accepted (Slices A and B)
+**Date:** 2026-04-26 (Slice A); 2026-04-30 (Slice B)
 
 ## Context
 
@@ -30,9 +30,15 @@ Slice A wires the SDK and the framework instrumentation only. The work is intent
 - Compose: `grafana/otel-lgtm:0.8.1` — a single ~1 GB image that bundles the OTel Collector, Tempo, Prometheus, Loki, and Grafana with the backends pre-wired into Grafana datasources. Behind `profiles: [observability]`; brought up with `make dev-up-observability`.
 - Default disabled. Existing deployments pay zero overhead until an operator opts in via `HUDDLE_OBSERVABILITY_ENABLED=true`.
 
-### Slice B — worker spans + RED metrics on the worker stack
+### Slice B — worker spans + RED metrics on the worker stack (accepted)
 
-Per-tick and per-row spans on each background worker (`audit.Consumer`, `search.Indexer`, `outbox.GC`, `notifications.Consumer`, `notifications.Mailer`, `invitations.Mailer`). Standard RED metrics — Rate of rows processed, Errors, Duration per tick. Connect handler attribute enrichment via a follow-up interceptor so spans carry user/org/action.
+Per-tick and per-row spans on each background worker (`audit.Consumer`, `search.Indexer`, `outbox.GC`, `notifications.Consumer`, `notifications.Mailer`, `invitations.Mailer`). Standard RED metrics published as `huddle.worker.rows_processed`, `huddle.worker.errors`, and `huddle.worker.tick_duration_seconds` — single instruments with a `worker` attribute, so dashboards `sum by (worker)` over one metric name rather than enumerating six. The `errors` counter additionally carries a `scope` attribute (`tick` vs `row`) so a noisy per-row failure doesn't drown out the more serious tick-level signal.
+
+`outbox.GC` is the odd worker out: it issues a single bulk DELETE, not a row-loop, so it gets a tick span only and `AddRows` fires once per tick with the row count the DELETE removed.
+
+Connect handler attribute enrichment ships as `observability.AttributeInterceptor`, which takes an `AttributeReader` function so the package stays free of an `auth`/`principal` import. The chain is `otelconnect` → `auth` → `AttributeInterceptor`; the enrichment runs after auth so claims are present in `ctx`. Today the only attribute is `huddle.user.subject` (the OIDC `sub` claim, a stable identifier). Email and other PII are deliberately not span attributes — the convention from the Slice A consequences section ("PII-bearing fields are not attribute-eligible") holds.
+
+The `WorkerInstr` type is nil-safe end-to-end: every method short-circuits on a nil receiver. Existing unit tests construct workers without `WithWorkerInstr` and stay zero-cost, no-op behavior preserved.
 
 ### Slice C — CDC pipeline observability (the load-bearing one post-Debezium)
 
@@ -75,7 +81,6 @@ Helm chart for the LGTM stack components plus a runbook ("the replication slot i
 
 ## Out of scope
 
-- **Slice B** — worker spans + RED metrics on the worker stack. Same architectural decision, different layer.
 - **Slice C** — Postgres-exporter for replication-slot lag, canned Grafana dashboard. The load-bearing operational story for ADR-0018's CDC pipeline.
 - **Slice D** — logs ingestion path (Alloy / promtail / collector logs receiver).
 - **Slice E** — Helm chart for the production observability stack.

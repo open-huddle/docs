@@ -63,13 +63,15 @@ Trace, metric, and log instrumentation is wired into the API behind a config fla
 make dev-up-observability
 ```
 
-This brings up the same services plus an `otel-lgtm` container exposing:
+This brings up the same services plus an `otel-lgtm` container, a `postgres-exporter` sidecar (replication-slot lag), and a `nats-exporter` sidecar (JetStream consumer pending). The published ports:
 
 | Port | Surface |
 |---|---|
 | **3000** | Grafana UI (anonymous access, no login in dev) |
 | **4317** | OTLP/gRPC collector — what the API exports to |
 | **4318** | OTLP/HTTP collector — alternative for clients that can't speak gRPC |
+| **9187** | postgres-exporter `/metrics` |
+| **7777** | prometheus-nats-exporter `/metrics` |
 
 To turn on instrumentation in the API itself, set the env var when running it:
 
@@ -77,7 +79,18 @@ To turn on instrumentation in the API itself, set the env var when running it:
 HUDDLE_OBSERVABILITY_ENABLED=true make api-run
 ```
 
-You'll see HTTP requests, Connect RPCs, and SQL queries appear as spans in Grafana → Explore → Tempo, plus connection-pool metrics in Grafana → Explore → Prometheus. The default is **disabled** so a fresh `make api-run` doesn't try to dial a collector that isn't there. Slice A of ADR-0019 covers the framework instrumentation; per-worker spans + canned dashboards land in later slices.
+You'll see HTTP requests, Connect RPCs, SQL queries, and per-worker tick/row spans appear in Grafana → Explore → Tempo. Worker RED metrics, outbox depth, and end-to-end Send→Subscribe latency appear under `huddle.*` in Prometheus.
+
+**Canned dashboard:** Open Grafana → Dashboards → Huddle → "CDC Pipeline Health". Six panels:
+
+- Replication-slot lag (bytes the Debezium slot is behind the WAL)
+- Outbox depth by consumer (publisher / indexer / notifications / audit)
+- NATS JetStream consumer pending
+- End-to-end Send→Subscribe latency (p50 / p95 / p99)
+- Worker error rate (split by tick vs. row scope)
+- Worker tick duration p95
+
+The default for `HUDDLE_OBSERVABILITY_ENABLED` is **disabled** so a fresh `make api-run` doesn't try to dial a collector that isn't there. Slices A, B, and C of [ADR-0019](/adr/observability-foundations) cover what's wired today; logs ingestion (Slice D) and Helm production charts (Slice E) are still ahead.
 
 ## Apply database migrations
 

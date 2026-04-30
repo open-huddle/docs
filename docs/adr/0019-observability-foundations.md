@@ -5,8 +5,8 @@ sidebar_label: "0019 · Observability foundations"
 
 # ADR 0019 — Observability foundations: OpenTelemetry SDK and the Grafana LGTM stack
 
-**Status:** Accepted (Slices A and B)
-**Date:** 2026-04-26 (Slice A); 2026-04-30 (Slice B)
+**Status:** Accepted (Slices A, B, and C)
+**Date:** 2026-04-26 (Slice A); 2026-04-30 (Slices B and C)
 
 ## Context
 
@@ -40,9 +40,18 @@ Connect handler attribute enrichment ships as `observability.AttributeIntercepto
 
 The `WorkerInstr` type is nil-safe end-to-end: every method short-circuits on a nil receiver. Existing unit tests construct workers without `WithWorkerInstr` and stay zero-cost, no-op behavior preserved.
 
-### Slice C — CDC pipeline observability (the load-bearing one post-Debezium)
+### Slice C — CDC pipeline observability (accepted)
 
-Postgres exporter in compose for replication-slot lag. Canned Grafana dashboard showing outbox depth (unpublished + un-stamped per consumer), Debezium slot lag, NATS consumer lag, and end-to-end Send→Subscribe latency. **This is the dashboard that answers "is the CDC pipeline healthy?"** — without it, ADR-0018's Slice C ("delete the in-process publisher") is operating blind.
+The dashboard that answers "is the CDC pipeline healthy?" Combines four data sources into one wall view, plus two supplementary panels reusing Slice B's worker metrics:
+
+- **Replication-slot lag** — `postgres_exporter` sidecar (`prometheuscommunity/postgres-exporter`), profile-gated alongside the API. Surfaces `pg_replication_slots_pg_wal_lsn_diff` (bytes the Debezium slot is behind master). The load-bearing CDC signal — without this metric ADR-0018's "Debezium is the only NATS publisher" is operating blind.
+- **Outbox depth by consumer** — Go-side observable gauge in `apps/api/internal/observability` (`huddle.outbox.depth`, attribute `consumer`). One SQL query per OTel collection interval reads the four downstream stamps (`published_at`, `indexed_at`, `notified_at`, plus the `audit_events` JOIN) and emits one data point per consumer column. Stays in the OTel pipeline alongside the worker.* metrics rather than carving out a postgres_exporter custom-query path.
+- **NATS JetStream consumer pending** — `prometheus-nats-exporter` sidecar scraping NATS's monitoring port (`:8222/varz` + `/jsz`). Surfaces `gnatsd_consumer_num_pending`. Combined with outbox depth and slot lag, isolates whether a backup is in Postgres → NATS or NATS → API.
+- **End-to-end Send→Subscribe latency** — Go-side histogram (`huddle.pipeline.send_to_subscribe_seconds`, attribute `message.kind`). Recorded inside `events.NATS.SubscribeMessages` at the moment a message is dispatched into the per-call channel; `now − Message.CreatedAt` captures the full chain (Postgres commit → WAL → Debezium → NATS publish → API consume → channel dispatch). Negative or >24h values are dropped to keep the histogram interpretable; 24h matches NATS's `MaxAge`.
+
+The two exporters are scraped by the OTel collector (via a `prometheus` receiver mounted as `otelcol-config-extras.yaml`) and forwarded into the existing metrics pipeline; the bundled Prometheus then serves them to Grafana alongside the OTLP-pushed `huddle.*` metrics.
+
+The Grafana dashboard is provisioned via a mounted directory (`/otel-lgtm/grafana/conf/provisioning/dashboards-content`) so it appears in the "Huddle" folder on every `make dev-up-observability`.
 
 ### Slice D — logs ingestion
 
@@ -81,7 +90,6 @@ Helm chart for the LGTM stack components plus a runbook ("the replication slot i
 
 ## Out of scope
 
-- **Slice C** — Postgres-exporter for replication-slot lag, canned Grafana dashboard. The load-bearing operational story for ADR-0018's CDC pipeline.
 - **Slice D** — logs ingestion path (Alloy / promtail / collector logs receiver).
 - **Slice E** — Helm chart for the production observability stack.
 - **PII redaction in span attributes.** Convention-driven for now; an automated linter or attribute allowlist is a future ADR if the surface grows.
